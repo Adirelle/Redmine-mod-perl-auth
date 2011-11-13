@@ -310,7 +310,7 @@ sub check_login {
 	}
 	
 	# Password is ok, check if account if locked	
-	return (FORBIDDEN, "inactive account: '$user'") unless $status eq 1;
+	return (FORBIDDEN, "inactive account: '$user'") unless $status == 1;
 
 	$r->log->debug("successfully authenticated as active redmine user '$user'");
 
@@ -458,7 +458,7 @@ sub query_fetch_first {
 # tell if a value returned from SQL is "true"
 sub is_true {
 	my $value = shift;
-  return defined($value) && ($value eq "1" || $value eq 1 || $value eq "t");
+  return defined($value) && ($value == 1 || $value eq "t");
 }
 
 # build credential cache key
