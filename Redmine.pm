@@ -119,56 +119,60 @@ use APR::Table ();
 # use Apache2::Directive qw();
 
 my @directives = (
-  {
-    name         => 'RedmineDSN',
-    req_override => OR_AUTHCFG,
-    args_how     => TAKE1,
-    errmsg       => 'DSN in format used by Perl DBI. eg: "DBI:Pg:dbname=databasename;host=my.db.server"',
-  },
-  {
-    name         => 'RedmineDbUser',
-    req_override => OR_AUTHCFG,
-    args_how     => TAKE1,
-  },
-  {
-    name         => 'RedmineDbPass',
-    req_override => OR_AUTHCFG,
-    args_how     => TAKE1,
-  },
-  {
-    name         => 'RedmineDbWhereClause',
-    req_override => OR_AUTHCFG,
-    args_how     => TAKE1,
-  },
-  {
-    name         => 'RedmineProject',
-    req_override => OR_AUTHCFG,
-    args_how     => TAKE1,
-  },
+	{
+		name         => 'RedmineDSN',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Redmine database DSN in format used by Perl DBI. eg: "DBI:Pg:dbname=databasename;host=my.db.server"',
+	},
+	{
+		name         => 'RedmineDbUser',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Redmine database user',
+	},
+	{
+		name         => 'RedmineDbPass',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Redmine database password',
+	},
+	{
+		name         => 'RedmineDbWhereClause',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Additionnal where clause used when checking for user permissions',
+	},
+	{
+		name         => 'RedmineProject',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Identifier (short name) of a Redmine project. If undefined, extract the project identifier from the location.',
+	},
 	{
 		name         => 'RedmineReadPermissions',
 		req_override => OR_AUTHCFG,
 		args_how     => ITERATE,
-		errmsg       => 'list of permissions to allow read access',
+		errmsg       => 'Permissions to check for read access. Defaults to :browse_repository.',
 	},
 	{
 		name         => 'RedmineWritePermissions',
 		req_override => OR_AUTHCFG,
 		args_how     => ITERATE,
-		errmsg       => 'list of permissions to allow other than read access',
+		errmsg       => 'Permissions to check for write access. Defaults to :commit_access.',
 	},
-  {
-    name         => 'RedmineCacheCredsMax',
-    req_override => OR_AUTHCFG,
-    args_how     => TAKE1,
-    errmsg       => 'RedmineCacheCredsMax must be decimal number',
-  },
-  {
-    name         => 'RedmineCacheCredsMaxAge',
-    req_override => OR_AUTHCFG,
-    args_how     => TAKE1,
-    errmsg       => 'RedmineCacheCredsMaxAge must be decimal number',
-  },
+	{
+		name         => 'RedmineCacheCredsMax',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Maximum number of credentials to cache. Set to 0 to disable credential caching.',
+	},
+	{
+		name         => 'RedmineCacheCredsMaxAge',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Maximum age of cached credentials. Defaults to 300. Set to 0 to disable credential expiration.',
+	},
 );
 
 sub RedmineDSN {
