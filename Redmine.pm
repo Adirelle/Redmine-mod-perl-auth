@@ -120,37 +120,42 @@ use APR::Table ();
 
 my @directives = (
   {
-    name => 'RedmineDSN',
+    name         => 'RedmineDSN',
     req_override => OR_AUTHCFG,
-    args_how => TAKE1,
-    errmsg => 'Dsn in format used by Perl DBI. eg: "DBI:Pg:dbname=databasename;host=my.db.server"',
+    args_how     => TAKE1,
+    errmsg       => 'DSN in format used by Perl DBI. eg: "DBI:Pg:dbname=databasename;host=my.db.server"',
   },
   {
-    name => 'RedmineDbUser',
+    name         => 'RedmineDbUser',
     req_override => OR_AUTHCFG,
-    args_how => TAKE1,
+    args_how     => TAKE1,
   },
   {
-    name => 'RedmineDbPass',
+    name         => 'RedmineDbPass',
     req_override => OR_AUTHCFG,
-    args_how => TAKE1,
+    args_how     => TAKE1,
   },
   {
-    name => 'RedmineDbWhereClause',
+    name         => 'RedmineDbWhereClause',
     req_override => OR_AUTHCFG,
-    args_how => TAKE1,
+    args_how     => TAKE1,
   },
   {
-    name => 'RedmineCacheCredsMax',
+    name         => 'RedmineProject',
     req_override => OR_AUTHCFG,
-    args_how => TAKE1,
-    errmsg => 'RedmineCacheCredsMax must be decimal number',
+    args_how     => TAKE1,
   },
   {
-    name => 'RedmineCacheCredsMaxAge',
+    name         => 'RedmineCacheCredsMax',
     req_override => OR_AUTHCFG,
-    args_how => TAKE1,
-    errmsg => 'RedmineCacheCredsMaxAge must be decimal number',
+    args_how     => TAKE1,
+    errmsg       => 'RedmineCacheCredsMax must be decimal number',
+  },
+  {
+    name         => 'RedmineCacheCredsMaxAge',
+    req_override => OR_AUTHCFG,
+    args_how     => TAKE1,
+    errmsg       => 'RedmineCacheCredsMaxAge must be decimal number',
   },
 );
 
