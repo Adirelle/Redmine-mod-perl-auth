@@ -173,63 +173,92 @@ my @directives = (
 		args_how     => TAKE1,
 		errmsg       => 'Maximum age of cached credentials. Defaults to 300. Set to 0 to disable credential expiration.',
 	},
+	{
+		name         => 'RedmineDenyAnonymous',
+		req_override => OR_AUTHCFG,
+		args_how     => FLAG,
+		errmsg       => 'Deny anonymous access. Defaults to no.',
+	},
+	{
+		name         => 'RedmineDenyNonMember',
+		req_override => OR_AUTHCFG,
+		args_how     => FLAG,
+		errmsg       => 'Do not check non-member permissions. Defaults to no.',
+	},
+	{
+		name         => 'RedmineSuperAdmin',
+		req_override => OR_AUTHCFG,
+		args_how     => FLAG,
+		errmsg       => 'Grant all permissions to administrators. Defaults to yes.',
+	},
 );
 
-sub RedmineDSN {
-  my ($cfg, $parms, $arg) = @_;
-  $cfg->{DSN} = $arg;
-  $cfg->{Query} = trim("
-		SELECT permissions FROM users, members, member_roles, roles
-		WHERE users.login = ?
-		  AND users.id = members.user_id
-		  AND users.status = 1
-		  AND	members.project_id = ?
-		  AND members.id = member_roles.member_id
-		  AND member_roles.role_id = roles.id
-	");
+# Initialize defaults configuration
+sub DIR_CREATE {
+	my($class, $parms) = @_;
+	return bless {
+		PermissionQuery => trim("
+			SELECT permissions FROM users, members, member_roles, roles
+			WHERE users.login = ?
+				AND users.id = members.user_id
+				AND users.status = 1
+				AND	members.project_id = ?
+				AND members.id = member_roles.member_id
+				AND member_roles.role_id = roles.id
+		"),
+		CacheCredsMax    => 0,
+		CacheCredsCount  => 0,
+		CacheCredsMaxAge => 300,
+		DenyAnonymous    => 0,
+		DenyNonMember    => 0,
+		SuperAdmin       => 1,
+	}, $class;
 }
 
+# Simple setters
+sub RedmineDSN { set_val('DSN', @_); }
 sub RedmineDbUser { set_val('DbUser', @_); }
 sub RedmineDbPass { set_val('DbPass', @_); }
-sub RedmineCacheCredsMaxAge { set_val('CacheCredsMaxAge', @_); }
 sub RedmineProject { set_val('Project', @_); }
+sub RedmineReadPermissions  { push_val('ReadPermissions', @_); }
+sub RedmineWritePermissions { push_val('WritePermissions', @_); }
+sub RedmineCacheCredsMaxAge { set_val('CacheCredsMaxAge', @_); }
+sub RedmineDenyAnonymous { set_val('DenyAnonymous', @_); }
+sub RedmineDenyNonMember { set_val('DenyNonMember', @_); }
+sub RedmineSuperAdmin { set_val('SuperAdmin', @_); }
 
 sub RedmineDbWhereClause {
   my ($cfg, $parms, $arg) = @_;
-  $cfg->{Query} = trim($cfg->{Query}.($arg || "")." ");
+  if($arg) {
+	  $cfg->{PermissionQuery} = trim($cfg->{PermissionQuery}."$arg ");
+	}
 }
 
 sub RedmineCacheCredsMax {
   my ($cfg, $parms, $arg) = @_;
   if ($arg) {
-    $cfg->{CachePool} = APR::Pool->new;
-    $cfg->{CacheCreds} = APR::Table::make($cfg->{CachePool}, $arg);
-    $cfg->{CacheCredsCount} = 0;
+  	unless($cfg->{CachePool}) {
+		  $cfg->{CachePool} = APR::Pool->new;
+		  $cfg->{CacheCreds} = APR::Table::make($cfg->{CachePool}, $arg);
+		}
     $cfg->{CacheCredsMax} = $arg;
-    $cfg->{CacheCredsMaxAge} ||= 300;
   }
 }
 
-
-sub RedmineReadPermissions {
-	my ( $cfg, $parms, $arg ) = @_;
-	push @{ $cfg->{ReadPermissions} }, $arg;
+sub set_val {
+  my ($key, $cfg, $parms, $arg) = @_;
+  $cfg->{$key} = $arg;
 }
 
-sub RedmineWritePermissions {
-	my ( $cfg, $parms, $arg ) = @_;
-	push @{ $cfg->{WritePermissions} }, $arg;
+sub push_val {
+  my ($key, $cfg, $parms, $arg) = @_;
+  push @{ $cfg->{$key} }, $arg;
 }
 
 sub trim {
   my $string = shift;
   $string =~ s/\s{2,}/ /g;
   return $string;
-}
-
-sub set_val {
-  my ($key, $self, $parms, $arg) = @_;
-  $self->{$key} = $arg;
 }
 
 Apache2::Module::add(__PACKAGE__, \@directives);
@@ -270,7 +299,9 @@ sub authen_handler {
 
 	} elsif($res == AUTH_REQUIRED) {
 		my $dbh = connect_database($r);
-		if(is_authentication_forced($dbh)) {
+		my $cfg = get_config($r);
+
+		if(!$cfg->{AllowAnonymous} || is_authentication_forced($dbh)) {
 			# We really want an user
 			$reason = 'anonymous access disabled';
 		} else {
@@ -292,7 +323,7 @@ sub check_login {
 	my ($r, $dbh, $password) = @_;
 	my $user = $r->user;
 
-	my ($hashed_password, $status, $auth_source_id, $salt) = $dbh->selectrow_arrayref('SELECT hashed_password, status, auth_source_id, salt FROM users WHERE login = ?', $user);
+	my ($hashed_password, $status, $auth_source_id, $salt) = $dbh->selectrow_array('SELECT hashed_password, status, auth_source_id, salt FROM users WHERE login = ?', undef, $user);
 
 	# Not found
 	return (AUTH_REQUIRED, "unknown user '$user'") unless defined($hashed_password);
@@ -349,7 +380,7 @@ sub check_login {
 # check if authentication is forced
 sub is_authentication_forced {
 	my $dbh = shift;
-  return is_true($dbh->selectrow_arrayref("SELECT value FROM settings WHERE settings.name = 'login_required'"));
+  return is_true($dbh->selectrow_array("SELECT value FROM settings WHERE settings.name = 'login_required'"));
 }
 
 sub authz_handler {
@@ -361,6 +392,7 @@ sub authz_handler {
   }
 
   my $dbh = connect_database($r);
+	my $cfg = get_config($r);
 
   my ($identifier, $project_id, $is_public, $status) = get_project_data($r, $dbh);
 	$is_public = is_true($is_public);
@@ -381,10 +413,10 @@ sub authz_handler {
 		$res = AUTH_REQUIRED;
 		$reason = "anonymous access to '$identifier' denied";
 
-		if($is_public) {
+		if($is_public && !$cfg->{DenyAnonymous}) {
 			# Check anonymous permissions
-			my ($permissions) = $dbh->selectrow_arrayref("SELECT permissions FROM roles WHERE builtin = 2");
-			$res = OK if check_permissions($r, $permissions);
+			my $permissions = $dbh->selectrow_array("SELECT permissions FROM roles WHERE builtin = 2");
+			$res = OK if $permissions && check_permissions($r, $permissions);
 		}
 
   	# Force login if failed
@@ -392,35 +424,47 @@ sub authz_handler {
 
   } else {
   	# Logged in user
-		my @permissions = ();
  		my $user = $r->user;
 
-		# Membership permissions
-		if(my @membership = $dbh->selectcol_arrayref($cfg->{Query}, $user, $project_id)) {
-			push @permissions, @membership;
-		}
+ 		if($cfg->{SuperAdmin} && is_true($dbh->selectrow_array("SELECT admin FROM users WHERE login = ?", undef, $user))) {
+ 			# Adminstrators have all the rights
+ 			$res = OK;
 
-		if($is_public) {
+ 		} else {
+ 			# Really check user permissions
+			my @permissions = ();
+
+			# Membership permissions
+			my $membership = $dbh->selectcol_arrayref($cfg->{PermissionQuery}, undef, $user, $project_id);
+			push @permissions, @{$membership} if $membership;
+
 			# Add non-member permissions for public projects
-				if(my ($non_member) = $dbh->selectrow_arrayref("SELECT permissions FROM roles WHERE builtin = 1")) {
-				push @permissions, $non_member;
+			if($is_public && !$cfg->{DenyNonMember}) {
+				my $non_member = $dbh->selectrow_array("SELECT permissions FROM roles WHERE builtin = 1");
+				push @permissions, $non_member if $non_member;
 			}
-		}
 
-		if(check_permissions($r, @permissions)) {
-			$res = OK;
+			# Look for the permissions
+			$res = OK if check_permissions($r, @permissions);
+ 		}
 
-			my $cache_key = $r->pnotes("RedmineCacheKey");
-			cache_set($r, $cache_key) if defined $cache_key;
+		if($res == OK) {
+			# Put successful credentials in cache
+			if(my $cache_key = $r->pnotes("RedmineCacheKey")) {
+				cache_set($r, $cache_key);
+			}
 
 		} else {
-			$reason = "insufficient permissions (user: '$user', project: '$identifier', required: '$required')";
+			$reason = "insufficient permissions (user: '$user', project: '$identifier')";
 		}
   }
 
-	$r->log->debug("access granted: user '", ($r->user || 'anonymous'), "', project '$identifier', method: '", $r->method, "'") if $res == OK;
-
-  $r->log_reason($reason) if $res != OK && defined $reason;
+	# Log what we have done
+	if($res == OK) {
+		$r->log->debug("access granted: user '", ($r->user || 'anonymous'), "', project '$identifier', method: '", $r->method, "'") if $res == OK;
+	} elsif(defined $reason) {
+	  $r->log_reason($reason);
+	}
 
   return $res;
 }
@@ -453,7 +497,7 @@ sub check_permissions {
 	my $permissions = join(' ', @_)
 		or return 0;
 
-	$cfg = get_config($r);
+	my $cfg = get_config($r);
 	my @required;
 	if(is_read_request($r)) {
 		@required = $cfg->{ReadPermissions} || @default_read_permissions;
@@ -474,7 +518,7 @@ sub get_project_data {
 	my $dbh = shift;
 
   my $identifier = get_project_identifier($r);
-	return $identifier, $dbh->selectrow_arrayref("SELECT id, is_public, status FROM projects WHERE identifier = ?", $identifier);
+	return $identifier, $dbh->selectrow_array("SELECT id, is_public, status FROM projects WHERE identifier = ?", undef, $identifier);
 }
 
 # return module configuration for current directory
@@ -501,7 +545,7 @@ sub is_true {
 # build credential cache key
 sub get_cache_key {
 	my ($r, $password) = @_;
-	return Digest::SHA1::sha1_hex(join(':', get_project_identifier($r), $r->user, $password, is_read_request($r) ? 'read' : 'write');
+	return Digest::SHA1::sha1_hex(join(':', get_project_identifier($r), $r->user, $password, is_read_request($r) ? 'read' : 'write'));
 }
 
 # check if credentials exist in cache
@@ -509,14 +553,13 @@ sub cache_get {
 	my($r, $key) = @_;
 
 	my $cfg = get_config($r);
-	my $cache = $cfg->{CacheCreds};
-	return unless $cache;
+	return unless $cfg->{CacheCredsMax};
 
-	my $time = $cache->get($key)
+	my $time = $cfg->{CacheCreds}->get($key)
 		or return 0;
 
 	if($cfg->{CacheCredsMaxAge} && ($r->request_time - $time) > $cfg->{CacheCredsMaxAge}) {
-		$cache->unset($key);
+		$cfg->{CacheCreds}->unset($key);
 		$cfg->{CacheCredsCount}--;
 		return 0;
 	}
@@ -528,16 +571,16 @@ sub cache_set {
 	my($r, $key) = @_;
 
 	my $cfg = get_config($r);
-	my $cache = $cfg->{CacheCreds};
-	return unless $cache;
+	return unless $cfg->{CacheCredsMax};
 
 	if($cfg->{CacheCredsCount} >= $cfg->{CacheCredsMax}) {
-		$cache->clear;
+		$cfg->{CacheCreds}->clear;
 		$cfg->{CacheCredsCount} = 0;
 	}
-	$cache->set($key, $r->request_time);
+	$cfg->{CacheCreds}->set($key, $r->request_time);
 	$cfg->{CacheCredsCount}++;
 }
 
 1;
+
 
