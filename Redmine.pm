@@ -373,9 +373,9 @@ sub check_login {
 			unless $CanUseLDAPAuth;
 
 		# Get LDAP server informations
-		my($host, $port, $tls, $account, $account_password, $base_dn, $attr_login) = query_fetch_first(
-			$dbh,
+		my($host, $port, $tls, $account, $account_password, $base_dn, $attr_login) = $dbh->selectrow_array(
 			"SELECT host,port,tls,account,account_password,base_dn,attr_login from auth_sources WHERE id = ?",
+			undef,
 			$auth_source_id
 		);
 
