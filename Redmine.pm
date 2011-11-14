@@ -426,20 +426,21 @@ sub authz_handler {
 			return FORBIDDEN;
 	}
 
-	my $dbh = connect_database($r);
-	my $cfg = get_config($r);
+	my $identifier = get_project_identifier($r)
+		or return DECLINED;
 
-	my ($identifier, $project_id, $is_public, $status) = get_project_data($r, $dbh);
+	my $dbh = connect_database($r)
+		or return SERVER_ERROR;
+		
+	my $cfg = get_config($r);
+		
+	my ($project_id, $is_public, $status) = $dbh->selectrow_array("SELECT id, is_public, status FROM projects WHERE identifier = ?", undef, $identifier)
+		or return DECLINED;
 	$is_public = is_true($is_public);
 
 	my($res, $reason) = FORBIDDEN;
 
-	unless(defined($project_id)) {
-		# Unknown project
-		$res = DECLINED;
-		$reason = "not a redmine project";
-
-	} elsif($status != 1 && !is_read_request($r)) {
+	if($status != 1 && !is_read_request($r)) {
 		# Write operation on archived project is forbidden
 		$reason = "write operations on inactive project '$identifier' are forbidden";
 
@@ -508,13 +509,12 @@ sub authz_handler {
 
 # get the project identifier
 sub get_project_identifier {
-	my ($r, $dbh) = @_;
+	my ($r) = @_;
 
 	my $cfg = get_config($r);
 	my $identifier = $cfg->{Project};
 	unless($identifier) {
-		my $location = $r->location;
-		($identifier) = $r->uri =~ m{^\Q$location\E/*([^/]+)};
+		($identifier) = $r->uri =~ m{^\Q$r->location\E/*([^/]+)};
 	}
 
 	return $identifier;
@@ -547,15 +547,6 @@ sub check_permissions {
 	}
 
 	return 0;
-}
-
-# get information about the project
-sub get_project_data {
-	my $r = shift;
-	my $dbh = shift;
-
-	my $identifier = get_project_identifier($r);
-	return $identifier, $dbh->selectrow_array("SELECT id, is_public, status FROM projects WHERE identifier = ?", undef, $identifier);
 }
 
 # return module configuration for current directory
