@@ -325,7 +325,9 @@ sub authen_handler {
 
 		} else {
 			# Else check them
-			my $dbh = connect_database($r);
+			my $dbh = connect_database($r)
+				or return SERVER_ERROR;
+				
 			($res, $reason) = check_login($r, $dbh, $password);
 			$dbh->disconnect();
 
@@ -334,7 +336,9 @@ sub authen_handler {
 		}
 
 	} elsif($res == AUTH_REQUIRED) {
-		my $dbh = connect_database($r);
+		my $dbh = connect_database($r)
+			or return SERVER_ERROR;
+			
 		my $cfg = get_config($r);
 
 		if(!$cfg->{AllowAnonymous} || is_authentication_forced($dbh)) {
@@ -566,7 +570,10 @@ sub connect_database {
 	my $r = shift;
 
 	my $cfg = get_config($r);
-	return DBI->connect($cfg->{DSN}, $cfg->{DbUser}, $cfg->{DbPass});
+	my $dbh = DBI->connect($cfg->{DSN}, $cfg->{DbUser}, $cfg->{DbPass})
+		or $r->log->error("Connection to database failed: $DBI::errstr.");
+	
+	return $dbh;
 }
 
 # tell if a value returned from SQL is "true"
