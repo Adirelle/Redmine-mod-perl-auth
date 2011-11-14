@@ -27,60 +27,60 @@ work on allmost all databases).
 
 On debian/ubuntu you must do :
 
-  aptitude install libapache-dbi-perl libapache2-mod-perl2 libdbd-mysql-perl
+	aptitude install libapache-dbi-perl libapache2-mod-perl2 libdbd-mysql-perl
 
 If your Redmine users use LDAP authentication, you will also need
 Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 
-  aptitude install libauthen-simple-ldap-perl libio-socket-ssl-perl
+	aptitude install libauthen-simple-ldap-perl libio-socket-ssl-perl
 
 =head1 CONFIGURATION
 
-   ## This module has to be in your perl path
-   ## eg:  /usr/lib/perl5/Apache/Authn/Redmine.pm
-   PerlLoadModule Apache::Authn::Redmine
-   <Location /svn>
-     DAV svn
-     SVNParentPath "/var/svn"
+	## This module has to be in your perl path
+	## eg:  /usr/lib/perl5/Apache/Authn/Redmine.pm
+	PerlLoadModule Apache::Authn::Redmine
+	<Location /svn>
+		DAV svn
+		SVNParentPath "/var/svn"
 
-     AuthType Basic
-     AuthName redmine
-     Require valid-user
+		AuthType Basic
+		AuthName redmine
+		Require valid-user
 
-     PerlAuthenHandler Apache::Authn::Redmine::authen_handler
-     PerlAuthzHandler Apache::Authn::Redmine::authz_handler
+		PerlAuthenHandler Apache::Authn::Redmine::authen_handler
+		PerlAuthzHandler Apache::Authn::Redmine::authz_handler
 
-     ## for mysql
-     RedmineDSN "DBI:mysql:database=databasename;host=my.db.server"
-     ## for postgres
-     # RedmineDSN "DBI:Pg:dbname=databasename;host=my.db.server"
+		## for mysql
+		RedmineDSN "DBI:mysql:database=databasename;host=my.db.server"
+		## for postgres
+		# RedmineDSN "DBI:Pg:dbname=databasename;host=my.db.server"
 
-     RedmineDbUser "redmine"
-     RedmineDbPass "password"
-     ## Optional where clause (fulltext search would be slow and
-     ## database dependant).
-     # RedmineDbWhereClause "and members.role_id IN (1,2)"
-     ## Optional credentials cache size
-     # RedmineCacheCredsMax 50
-  </Location>
+		RedmineDbUser "redmine"
+		RedmineDbPass "password"
+		## Optional where clause (fulltext search would be slow and
+		## database dependant).
+		# RedmineDbWhereClause "and members.role_id IN (1,2)"
+		## Optional credentials cache size
+		# RedmineCacheCredsMax 50
+	</Location>
 
 To be able to browse repository inside redmine, you must add something
 like that :
 
-   <Location /svn-private>
-     DAV svn
-     SVNParentPath "/var/svn"
-     Order deny,allow
-     Deny from all
-     # only allow reading orders
-     <Limit GET PROPFIND OPTIONS REPORT>
-       Allow from redmine.server.ip
-     </Limit>
-   </Location>
+	<Location /svn-private>
+		DAV svn
+		SVNParentPath "/var/svn"
+		Order deny,allow
+		Deny from all
+		# only allow reading orders
+		<Limit GET PROPFIND OPTIONS REPORT>
+			Allow from redmine.server.ip
+		</Limit>
+	</Location>
 
 and you will have to use this reposman.rb command line to create repository :
 
-  reposman.rb --redmine my.redmine.server --svn-dir /var/svn --owner www-data -u http://svn.server/svn-private/
+	reposman.rb --redmine my.redmine.server --svn-dir /var/svn --owner www-data -u http://svn.server/svn-private/
 
 =head1 MIGRATION FROM OLDER RELEASES
 
@@ -88,8 +88,8 @@ If you use an older reposman.rb (r860 or before), you need to change
 rights on repositories to allow the apache user to read and write
 S<them :>
 
-  sudo chown -R www-data /var/svn/*
-  sudo chmod -R u+w /var/svn/*
+	sudo chown -R www-data /var/svn/*
+	sudo chmod -R u+w /var/svn/*
 
 And you need to upgrade at least reposman.rb (after r860).
 
@@ -228,37 +228,37 @@ sub RedmineDenyNonMember { set_val('DenyNonMember', @_); }
 sub RedmineSuperAdmin { set_val('SuperAdmin', @_); }
 
 sub RedmineDbWhereClause {
-  my ($cfg, $parms, $arg) = @_;
-  if($arg) {
-	  $cfg->{PermissionQuery} = trim($cfg->{PermissionQuery}."$arg ");
+	my ($cfg, $parms, $arg) = @_;
+	if($arg) {
+		$cfg->{PermissionQuery} = trim($cfg->{PermissionQuery}."$arg ");
 	}
 }
 
 sub RedmineCacheCredsMax {
-  my ($cfg, $parms, $arg) = @_;
-  if ($arg) {
-  	unless($cfg->{CachePool}) {
-		  $cfg->{CachePool} = APR::Pool->new;
-		  $cfg->{CacheCreds} = APR::Table::make($cfg->{CachePool}, $arg);
+	my ($cfg, $parms, $arg) = @_;
+	if ($arg) {
+		unless($cfg->{CachePool}) {
+			$cfg->{CachePool} = APR::Pool->new;
+			$cfg->{CacheCreds} = APR::Table::make($cfg->{CachePool}, $arg);
 		}
-    $cfg->{CacheCredsMax} = $arg;
-  }
+		$cfg->{CacheCredsMax} = $arg;
+	}
 }
 
 sub set_val {
-  my ($key, $cfg, $parms, $arg) = @_;
-  $cfg->{$key} = $arg;
+	my ($key, $cfg, $parms, $arg) = @_;
+	$cfg->{$key} = $arg;
 }
 
 sub push_val {
-  my ($key, $cfg, $parms, $arg) = @_;
-  push @{ $cfg->{$key} }, $arg;
+	my ($key, $cfg, $parms, $arg) = @_;
+	push @{ $cfg->{$key} }, $arg;
 }
 
 sub trim {
-  my $string = shift;
-  $string =~ s/\s{2,}/ /g;
-  return $string;
+	my $string = shift;
+	$string =~ s/\s{2,}/ /g;
+	return $string;
 }
 
 Apache2::Module::add(__PACKAGE__, \@directives);
@@ -268,12 +268,12 @@ my @default_read_permissions = ( ':browse_repository' );
 my @default_write_permissions = ( ':commit_access' );
 
 sub authen_handler {
-  my $r = shift;
+	my $r = shift;
 
-  unless ($r->some_auth_required) {
-      $r->log_reason("No authentication has been configured");
-      return FORBIDDEN;
-  }
+	unless ($r->some_auth_required) {
+			$r->log_reason("No authentication has been configured");
+			return FORBIDDEN;
+	}
 
 	my ($res, $password) = $r->get_basic_auth_pw();
 	my $reason;
@@ -315,7 +315,7 @@ sub authen_handler {
 	$r->log_reason($reason) if defined($reason);
 	$r->note_basic_auth_failure unless $res == OK;
 
-  return $res;
+	return $res;
 }
 
 
@@ -348,18 +348,18 @@ sub check_login {
 			unless defined $host;
 
 		# Connect to the LDAP server
-    my $ldap = Authen::Simple::LDAP->new(
-        host    =>      is_true($tls) ? "ldaps://$host:$port" : $host,
-        port    =>      $port,
-        basedn  =>      $base_dn,
-        binddn  =>      $account || "",
-        bindpw  =>      $account_password || "",
-        filter  =>      '('.$attr_login.'=%s)'
-    );
+		my $ldap = Authen::Simple::LDAP->new(
+				host    =>      is_true($tls) ? "ldaps://$host:$port" : $host,
+				port    =>      $port,
+				basedn  =>      $base_dn,
+				binddn  =>      $account || "",
+				bindpw  =>      $account_password || "",
+				filter  =>      '('.$attr_login.'=%s)'
+		);
 
-    # Finally check user login
-    return (AUTH_REQUIRED, "LDAP authentication failed (user: '$user', server: '$host')")
-    	unless $ldap->authenticate($user, $password);
+		# Finally check user login
+		return (AUTH_REQUIRED, "LDAP authentication failed (user: '$user', server: '$host')")
+			unless $ldap->authenticate($user, $password);
 
 	} else {
 		# Database authentication
@@ -380,36 +380,36 @@ sub check_login {
 # check if authentication is forced
 sub is_authentication_forced {
 	my $dbh = shift;
-  return is_true($dbh->selectrow_array("SELECT value FROM settings WHERE settings.name = 'login_required'"));
+	return is_true($dbh->selectrow_array("SELECT value FROM settings WHERE settings.name = 'login_required'"));
 }
 
 sub authz_handler {
-  my $r = shift;
+	my $r = shift;
 
-  unless ($r->some_auth_required) {
-      $r->log_reason("No authentication has been configured");
-      return FORBIDDEN;
-  }
+	unless ($r->some_auth_required) {
+			$r->log_reason("No authentication has been configured");
+			return FORBIDDEN;
+	}
 
-  my $dbh = connect_database($r);
+	my $dbh = connect_database($r);
 	my $cfg = get_config($r);
 
-  my ($identifier, $project_id, $is_public, $status) = get_project_data($r, $dbh);
+	my ($identifier, $project_id, $is_public, $status) = get_project_data($r, $dbh);
 	$is_public = is_true($is_public);
 
 	my($res, $reason) = FORBIDDEN;
 
-  unless(defined($project_id)) {
-  	# Unknown project
-  	$res = DECLINED;
-  	$reason = "not a redmine project";
+	unless(defined($project_id)) {
+		# Unknown project
+		$res = DECLINED;
+		$reason = "not a redmine project";
 
-  } elsif($status != 1 && !is_read_request($r)) {
-  	# Write operation on archived project is forbidden
-  	$reason = "write operations on inactive project '$identifier' are forbidden";
+	} elsif($status != 1 && !is_read_request($r)) {
+		# Write operation on archived project is forbidden
+		$reason = "write operations on inactive project '$identifier' are forbidden";
 
 	} elsif(!$r->user) {
-  	# Anonymous access
+		# Anonymous access
 		$res = AUTH_REQUIRED;
 		$reason = "anonymous access to '$identifier' denied";
 
@@ -419,19 +419,19 @@ sub authz_handler {
 			$res = OK if $permissions && check_permissions($r, $permissions);
 		}
 
-  	# Force login if failed
+		# Force login if failed
 		$r->note_auth_failure unless $res == OK;
 
-  } else {
-  	# Logged in user
- 		my $user = $r->user;
+	} else {
+		# Logged in user
+		my $user = $r->user;
 
- 		if($cfg->{SuperAdmin} && is_true($dbh->selectrow_array("SELECT admin FROM users WHERE login = ?", undef, $user))) {
- 			# Adminstrators have all the rights
- 			$res = OK;
+		if($cfg->{SuperAdmin} && is_true($dbh->selectrow_array("SELECT admin FROM users WHERE login = ?", undef, $user))) {
+			# Adminstrators have all the rights
+			$res = OK;
 
- 		} else {
- 			# Really check user permissions
+		} else {
+			# Really check user permissions
 			my @permissions = ();
 
 			# Membership permissions
@@ -446,7 +446,7 @@ sub authz_handler {
 
 			# Look for the permissions
 			$res = OK if check_permissions($r, @permissions);
- 		}
+		}
 
 		if($res == OK) {
 			# Put successful credentials in cache
@@ -457,16 +457,16 @@ sub authz_handler {
 		} else {
 			$reason = "insufficient permissions (user: '$user', project: '$identifier')";
 		}
-  }
+	}
 
 	# Log what we have done
 	if($res == OK) {
 		$r->log->debug("access granted: user '", ($r->user || 'anonymous'), "', project '$identifier', method: '", $r->method, "'") if $res == OK;
 	} elsif(defined $reason) {
-	  $r->log_reason($reason);
+		$r->log_reason($reason);
 	}
 
-  return $res;
+	return $res;
 }
 
 # get the project identifier
@@ -480,7 +480,7 @@ sub get_project_identifier {
 		($identifier) = $r->uri =~ m{^\Q$location\E/*([^/]+)};
 	}
 
-  return $identifier;
+	return $identifier;
 }
 
 # tell if the given request is a read operation
@@ -517,7 +517,7 @@ sub get_project_data {
 	my $r = shift;
 	my $dbh = shift;
 
-  my $identifier = get_project_identifier($r);
+	my $identifier = get_project_identifier($r);
 	return $identifier, $dbh->selectrow_array("SELECT id, is_public, status FROM projects WHERE identifier = ?", undef, $identifier);
 }
 
@@ -539,7 +539,7 @@ sub connect_database {
 # tell if a value returned from SQL is "true"
 sub is_true {
 	my $value = shift;
-  return defined($value) && ($value == 1 || $value eq "t");
+	return defined($value) && ($value == 1 || $value eq "t");
 }
 
 # build credential cache key
