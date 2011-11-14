@@ -57,11 +57,47 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 
 		RedmineDbUser "redmine"
 		RedmineDbPass "password"
-		## Optional where clause (fulltext search would be slow and
-		## database dependant).
+		
+		## Authorization where clause (fulltext search would be slow and database dependant).
+		## Default: none
 		# RedmineDbWhereClause "and members.role_id IN (1,2)"
-		## Optional credentials cache size
+		
+		## Credentials cache size
+		## Default: 0 (disabled)
 		# RedmineCacheCredsMax 50
+		
+		## Credentials cache expiration delay in seconds
+		## Set to 0 to disable expiration.
+		## Default: 5 minutes (300)
+		# RedmineCacheCredsMaxAge 60
+		
+		## Check authorizations against a specific project.
+		## Default: none (extract project from location)
+		# RedmineProject myproject
+		
+		## Permissions to check for "read" access.
+		## You can add several permissions, user is granted access if *at least* one them exists.
+		## Default: :browse_repository
+		# RedmineReadPermissions :browse_repository
+		
+		## Permissions to check for "write" access.
+		## You can add several permissions, user is granted access if *at least* one them exists.
+		## Default: :commit_access
+		# RedmineWritePermissions :commit_access
+		
+		## Deny anonymous access.
+		## Affects both authentication and authorization
+		## Default: Off
+		# RedmineDenyAnonymous On
+				
+		## Deny non-member access to projects.
+		## Default: Off
+		# RedmineDenyNonMember On
+		
+		## Administrators have super-powers
+		## Default: On
+		# RedmineSuperAdmin Off
+		
 	</Location>
 
 To be able to browse repository inside redmine, you must add something
