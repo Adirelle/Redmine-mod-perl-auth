@@ -359,10 +359,8 @@ sub check_login {
 	my ($r, $dbh, $password) = @_;
 	my $user = $r->user;
 
-	my ($hashed_password, $status, $auth_source_id, $salt) = $dbh->selectrow_array('SELECT hashed_password, status, auth_source_id, salt FROM users WHERE login = ?', undef, $user);
-
-	# Not found
-	return (AUTH_REQUIRED, "unknown user '$user'") unless defined($hashed_password);
+	my ($hashed_password, $status, $auth_source_id, $salt) = $dbh->selectrow_array('SELECT hashed_password, status, auth_source_id, salt FROM users WHERE login = ?', undef, $user)
+		or return (AUTH_REQUIRED, "unknown user '$user'");
 
 	# Check password
 	if($auth_source_id) {
@@ -377,11 +375,8 @@ sub check_login {
 			"SELECT host,port,tls,account,account_password,base_dn,attr_login from auth_sources WHERE id = ?",
 			undef,
 			$auth_source_id
-		);
-
-		# Check them
-		return (SERVER_ERROR, "Undefined authentication source for '$user'")
-			unless defined $host;
+		)
+			or return (SERVER_ERROR, "Undefined authentication source for '$user'");
 
 		# Connect to the LDAP server
 		my $ldap = Authen::Simple::LDAP->new(
