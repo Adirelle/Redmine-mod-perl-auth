@@ -501,6 +501,8 @@ sub authz_handler {
 	} elsif(defined $reason) {
 		$r->log_reason($reason);
 	}
+	
+	$dbh->disconnect();
 
 	return $res;
 }
