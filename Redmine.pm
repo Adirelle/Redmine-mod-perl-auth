@@ -147,6 +147,7 @@ use Apache2::Access;
 use Apache2::ServerRec qw();
 use Apache2::RequestRec qw();
 use Apache2::RequestUtil qw();
+use Apache2::CmdParms qw();
 use Apache2::Const qw(:common :override :cmd_how);
 use Apache2::Log;
 use APR::Pool ();
@@ -232,6 +233,7 @@ my @directives = (
 # Initialize defaults configuration
 sub DIR_CREATE {
 	my($class, $parms) = @_;
+	my $identifier_re = "^".quotemeta($parms->path)."/?([^/]+)" if $parms->path;
 	return bless {
 		PermissionQuery => trim("
 			SELECT permissions FROM users, members, member_roles, roles
@@ -242,6 +244,7 @@ sub DIR_CREATE {
 				AND members.id = member_roles.member_id
 				AND member_roles.role_id = roles.id
 		"),
+		IdentifierRegex  => $identifier_re ? qr{$identifier_re} : undef,
 		CacheCredsMax    => 0,
 		CacheCredsCount  => 0,
 		CacheCredsMaxAge => 300,
@@ -513,8 +516,8 @@ sub get_project_identifier {
 
 	my $cfg = get_config($r);
 	my $identifier = $cfg->{Project};
-	unless($identifier) {
-		($identifier) = $r->uri =~ m{^\Q$r->location\E/*([^/]+)};
+	unless(defined $identifier || !defined $cfg->{IdentifierRegex}) {
+		($identifier) = ($r->uri =~ $cfg->{IdentifierRegex});
 	}
 
 	return $identifier;
