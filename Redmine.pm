@@ -261,6 +261,7 @@ sub RedmineDbPass { set_val('DbPass', @_); }
 sub RedmineProject { set_val('Project', @_); }
 sub RedmineReadPermissions  { push_val('ReadPermissions', @_); }
 sub RedmineWritePermissions { push_val('WritePermissions', @_); }
+sub RedmineCacheCredsMax { set_val('CacheCredsMax', @_); }
 sub RedmineCacheCredsMaxAge { set_val('CacheCredsMaxAge', @_); }
 sub RedmineDenyAnonymous { set_val('DenyAnonymous', @_); }
 sub RedmineDenyNonMember { set_val('DenyNonMember', @_); }
@@ -270,17 +271,6 @@ sub RedmineDbWhereClause {
 	my ($cfg, $parms, $arg) = @_;
 	if($arg) {
 		$cfg->{PermissionQuery} = trim($cfg->{PermissionQuery}."$arg ");
-	}
-}
-
-sub RedmineCacheCredsMax {
-	my ($cfg, $parms, $arg) = @_;
-	if ($arg) {
-		unless($cfg->{CachePool}) {
-			$cfg->{CachePool} = APR::Pool->new;
-			$cfg->{CacheCreds} = APR::Table::make($cfg->{CachePool}, $arg);
-		}
-		$cfg->{CacheCredsMax} = $arg;
 	}
 }
 
@@ -589,7 +579,7 @@ sub cache_get {
 	my($r, $key) = @_;
 
 	my $cfg = get_config($r);
-	return unless $cfg->{CacheCredsMax};
+	return unless $cfg->{CacheCredsMax} && $cfg->{CacheCreds};
 
 	my $time = $cfg->{CacheCreds}->get($key)
 		or return 0;
@@ -608,6 +598,11 @@ sub cache_set {
 
 	my $cfg = get_config($r);
 	return unless $cfg->{CacheCredsMax};
+
+	unless($cfg->{CacheCreds}) {
+		$cfg->{CachePool} = APR::Pool->new;
+		$cfg->{CacheCreds} = APR::Table::make($cfg->{CachePool}, $cfg->{CacheCredsMax});
+	}
 
 	if($cfg->{CacheCredsCount} >= $cfg->{CacheCredsMax}) {
 		$cfg->{CacheCreds}->clear;
