@@ -135,7 +135,7 @@ use strict;
 use warnings FATAL => 'all', NONFATAL => 'redefine';
 
 use DBI;
-use Digest::SHA1;
+use Digest::SHA;
 # optional module for LDAP authentication
 my $CanUseLDAPAuth = eval("use Authen::Simple::LDAP; 1");
 
@@ -398,9 +398,9 @@ sub check_login {
 
 	} else {
 		# Database authentication
-		my $pass_digest = Digest::SHA1::sha1_hex($password);
+		my $pass_digest = Digest::SHA::sha1_hex($password);
 		return (AUTH_REQUIRED, "wrong password for '$user'")
-			unless $hashed_password eq Digest::SHA1::sha1_hex($salt.$pass_digest);
+			unless $hashed_password eq Digest::SHA::sha1_hex($salt.$pass_digest);
 	}
 
 	# Password is ok, check if account if locked
@@ -576,7 +576,7 @@ sub is_true {
 # build credential cache key
 sub get_cache_key {
 	my ($r, $password) = @_;
-	return Digest::SHA1::sha1_hex(join(':', get_project_identifier($r), $r->user, $password, is_read_request($r) ? 'read' : 'write'));
+	return Digest::SHA::sha1_hex(join(':', get_project_identifier($r), $r->user, $password, is_read_request($r) ? 'read' : 'write'));
 }
 
 # check if credentials exist in cache
