@@ -319,7 +319,7 @@ sub authen_handler {
 
 		#	Used cached credentials if possible
 		my $cache_key = get_cache_key($r, $password);
-		if(cache_get($r, $cache_key)) {
+		if(defined $cache_key && cache_get($r, $cache_key)) {
 			$r->log->debug("reusing cached credentials for user '", $r->user, "'");
 			$r->set_handlers(PerlAuthzHandler => undef);
 
@@ -332,7 +332,7 @@ sub authen_handler {
 			$dbh->disconnect();
 
 			# Store the cache key for latter use
-			$r->pnotes("RedmineCacheKey" => $cache_key) if $res == OK;
+			$r->pnotes("RedmineCacheKey" => $cache_key) if $res == OK && defined $cache_key;
 		}
 
 	} elsif($res == AUTH_REQUIRED) {
@@ -576,7 +576,9 @@ sub is_true {
 # build credential cache key
 sub get_cache_key {
 	my ($r, $password) = @_;
-	return Digest::SHA::sha1_hex(join(':', get_project_identifier($r), $r->user, $password, is_read_request($r) ? 'read' : 'write'));
+	my $project = get_project_identifier($r)
+		or return;
+	return Digest::SHA::sha1_hex(join(':', $project, $r->user, $password, is_read_request($r) ? 'read' : 'write'));
 }
 
 # check if credentials exist in cache
