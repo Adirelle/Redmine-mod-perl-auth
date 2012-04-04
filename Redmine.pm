@@ -57,47 +57,47 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 
 		RedmineDbUser "redmine"
 		RedmineDbPass "password"
-		
+
 		## Authorization where clause (fulltext search would be slow and database dependant).
 		## Default: none
 		# RedmineDbWhereClause "and members.role_id IN (1,2)"
-		
+
 		## Credentials cache size
 		## Default: 0 (disabled)
 		# RedmineCacheCredsMax 50
-		
+
 		## Credentials cache expiration delay in seconds
 		## Set to 0 to disable expiration.
 		## Default: 5 minutes (300)
 		# RedmineCacheCredsMaxAge 60
-		
+
 		## Check authorizations against a specific project.
 		## Default: none (extract project from location)
 		# RedmineProject myproject
-		
+
 		## Permissions to check for "read" access.
 		## You can add several permissions, user is granted access if *at least* one them exists.
 		## Default: :browse_repository
 		# RedmineReadPermissions :browse_repository
-		
+
 		## Permissions to check for "write" access.
 		## You can add several permissions, user is granted access if *at least* one them exists.
 		## Default: :commit_access
 		# RedmineWritePermissions :commit_access
-		
+
 		## Deny anonymous access.
 		## Affects both authentication and authorization
 		## Default: Off
 		# RedmineDenyAnonymous On
-				
+
 		## Deny non-member access to projects.
 		## Default: Off
 		# RedmineDenyNonMember On
-		
+
 		## Administrators have super-powers
 		## Default: On
 		# RedmineSuperAdmin Off
-		
+
 	</Location>
 
 To be able to browse repository inside redmine, you must add something
@@ -327,7 +327,7 @@ sub authen_handler {
 			# Else check them
 			my $dbh = connect_database($r)
 				or return SERVER_ERROR;
-				
+
 			($res, $reason) = check_login($r, $dbh, $password);
 			$dbh->disconnect();
 
@@ -338,7 +338,7 @@ sub authen_handler {
 	} elsif($res == AUTH_REQUIRED) {
 		my $dbh = connect_database($r)
 			or return SERVER_ERROR;
-			
+
 		my $cfg = get_config($r);
 
 		if(!$cfg->{AllowAnonymous} || is_authentication_forced($dbh)) {
@@ -431,9 +431,9 @@ sub authz_handler {
 
 	my $dbh = connect_database($r)
 		or return SERVER_ERROR;
-		
+
 	my $cfg = get_config($r);
-		
+
 	my ($project_id, $is_public, $status) = $dbh->selectrow_array("SELECT id, is_public, status FROM projects WHERE identifier = ?", undef, $identifier)
 		or return DECLINED;
 	$is_public = is_true($is_public);
@@ -501,7 +501,7 @@ sub authz_handler {
 	} elsif(defined $reason) {
 		$r->log_reason($reason);
 	}
-	
+
 	$dbh->disconnect();
 
 	return $res;
@@ -563,7 +563,7 @@ sub connect_database {
 	my $cfg = get_config($r);
 	my $dbh = DBI->connect($cfg->{DSN}, $cfg->{DbUser}, $cfg->{DbPass})
 		or $r->log->error("Connection to database failed: $DBI::errstr.");
-	
+
 	return $dbh;
 }
 
