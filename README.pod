@@ -1,0 +1,135 @@
+=head1 Apache::Authn::Redmine
+
+Redmine - a mod_perl module to authenticate webdav subversion users
+against redmine database
+
+=head1 SYNOPSIS
+
+This module allow anonymous users to browse public project and
+registred users to browse and commit their project. Authentication is
+done against the redmine database or the LDAP configured in redmine.
+
+This method is far simpler than the one with pam_* and works with all
+database without an hassle but you need to have apache/mod_perl on the
+svn server.
+
+=head1 INSTALLATION
+
+For this to automagically work, you need to have a recent reposman.rb
+(after r860) and if you already use reposman, read the last section to
+migrate.
+
+Sorry ruby users but you need some perl modules, at least mod_perl2,
+DBI and DBD::mysql (or the DBD driver for you database as it should
+work on allmost all databases).
+
+On debian/ubuntu you must do :
+
+	aptitude install libapache-dbi-perl libapache2-mod-perl2 libdbd-mysql-perl
+
+If your Redmine users use LDAP authentication, you will also need
+Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
+
+	aptitude install libauthen-simple-ldap-perl libio-socket-ssl-perl
+
+=head1 CONFIGURATION
+
+	## This module has to be in your perl path
+	## eg:  /usr/lib/perl5/Apache/Authn/Redmine.pm
+	PerlLoadModule Apache::Authn::Redmine
+	<Location /svn>
+		DAV svn
+		SVNParentPath "/var/svn"
+
+		AuthType Basic
+		AuthName redmine
+		Require valid-user
+
+		PerlAuthenHandler Apache::Authn::Redmine::authen_handler
+		PerlAuthzHandler Apache::Authn::Redmine::authz_handler
+
+		## for mysql
+		RedmineDSN "DBI:mysql:database=databasename;host=my.db.server"
+		## for postgres
+		# RedmineDSN "DBI:Pg:dbname=databasename;host=my.db.server"
+
+		RedmineDbUser "redmine"
+		RedmineDbPass "password"
+
+		## Authorization where clause (fulltext search would be slow and database dependant).
+		## Default: none
+		# RedmineDbWhereClause "and members.role_id IN (1,2)"
+
+		## SCM transport protocol, used to detecte write requests
+		## Valid values: dav-svn, git-smart-http
+		## Default: dav-svn
+		# RedmineSCMProtocol dav-svn
+
+		## Credentials cache size
+		## Default: 0 (disabled)
+		# RedmineCacheCredsMax 50
+
+		## Credentials cache expiration delay in seconds
+		## Set to 0 to disable expiration.
+		## Default: 5 minutes (300)
+		# RedmineCacheCredsMaxAge 60
+
+		## Check authorizations against a specific project.
+		## Default: none (extract project from location)
+		# RedmineProject myproject
+
+		## Permissions to check for "read" access.
+		## You can add several permissions, user is granted access if *at least* one them exists.
+		## Default: :browse_repository
+		# RedmineReadPermissions :browse_repository
+
+		## Permissions to check for "write" access.
+		## You can add several permissions, user is granted access if *at least* one them exists.
+		## Default: :commit_access
+		# RedmineWritePermissions :commit_access
+
+		## Deny anonymous access.
+		## Affects both authentication and authorization
+		## Default: Off
+		# RedmineDenyAnonymous On
+
+		## Deny non-member access to projects.
+		## Default: Off
+		# RedmineDenyNonMember On
+
+		## Administrators have super-powers
+		## Default: On
+		# RedmineSuperAdmin Off
+
+	</Location>
+
+To be able to browse repository inside redmine, you must add something
+like that :
+
+	<Location /svn-private>
+		DAV svn
+		SVNParentPath "/var/svn"
+		Order deny,allow
+		Deny from all
+		# only allow reading orders
+		<Limit GET PROPFIND OPTIONS REPORT>
+			Allow from redmine.server.ip
+		</Limit>
+	</Location>
+
+and you will have to use this reposman.rb command line to create repository :
+
+	reposman.rb --redmine my.redmine.server --svn-dir /var/svn --owner www-data -u http://svn.server/svn-private/
+
+=head1 MIGRATION FROM OLDER RELEASES
+
+If you use an older reposman.rb (r860 or before), you need to change
+rights on repositories to allow the apache user to read and write
+S<them :>
+
+	sudo chown -R www-data /var/svn/*
+	sudo chmod -R u+w /var/svn/*
+
+And you need to upgrade at least reposman.rb (after r860).
+
+=cut
