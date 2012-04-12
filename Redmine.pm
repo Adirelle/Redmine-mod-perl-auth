@@ -228,6 +228,12 @@ my @directives = (
 		args_how     => FLAG,
 		errmsg       => 'Grant all permissions to administrators. Defaults to yes.',
 	},
+	{
+		name         => 'RedmineSCMProtocol',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'Indicate the type of SCM protocol (dav-svn or git-smart-http). This is used to properly detected write requests. Defaults to dev-svn.',
+	},
 );
 
 # Initialize defaults configuration
@@ -244,6 +250,7 @@ sub DIR_CREATE {
 				AND members.id = member_roles.member_id
 				AND member_roles.role_id = roles.id
 		"),
+		SCMProtocol      => 'dav-svn',
 		IdentifierRegex  => $identifier_re ? qr{$identifier_re} : undef,
 		CacheCredsMax    => 0,
 		CacheCredsCount  => 0,
@@ -273,6 +280,17 @@ sub RedmineDbWhereClause {
 		$cfg->{PermissionQuery} = trim($cfg->{PermissionQuery}."$arg ");
 	}
 }
+
+sub RedmineSCMProtocol {
+	my ($cfg, $parms, $arg) = @_;
+	$arg = trim($arg);
+	if($arg eq 'dav-svn' || $arg eq 'git-smart-http') {
+		$cfg->{SCMProtocol} = $arg;
+	} else {
+		die "Invalid RedmineSCMProtocol value: $arg, choose either dav-svn or git-smart-http !";
+	}
+}
+
 
 sub set_val {
 	my ($key, $cfg, $parms, $arg) = @_;
@@ -517,7 +535,13 @@ sub get_project_identifier {
 sub is_read_request {
 	my $r = shift;
 
-	return defined $read_only_methods{$r->method};
+	my $cfg = get_config($r);
+	if($cfg->{SCMProtocol} eq "dav-svn") {
+		return defined $read_only_methods{$r->method};
+	} else {
+		my $quoted_location = quotemeta($r->location);
+		return $r->uri !~ m@^$quoted_location/.*/git-receive-pack$@;
+	}
 }
 
 # check if one of the required permissions is in the passed list
