@@ -62,6 +62,11 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		## Default: none
 		# RedmineDbWhereClause "and members.role_id IN (1,2)"
 
+		## SCM transport protocol, used to detecte write requests
+		## Valid values: dav-svn, git-smart-http
+		## Default: dav-svn
+		# RedmineSCMProtocol dav-svn
+
 		## Credentials cache size
 		## Default: 0 (disabled)
 		# RedmineCacheCredsMax 50
