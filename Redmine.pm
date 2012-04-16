@@ -63,9 +63,9 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		# RedmineDbWhereClause "and members.role_id IN (1,2)"
 
 		## SCM transport protocol, used to detecte write requests
-		## Valid values: dav-svn, git-smart-http
-		## Default: dav-svn
-		# RedmineSCMProtocol dav-svn
+		## Valid values: Subversion, Git
+		## Default: Subversion
+		# RedmineRepositoryType Subversion
 
 		## Credentials cache size
 		## Default: 0 (disabled)
@@ -234,10 +234,10 @@ my @directives = (
 		errmsg       => 'Grant all permissions to administrators. Defaults to yes.',
 	},
 	{
-		name         => 'RedmineSCMProtocol',
+		name         => 'RedmineRepositoryType',
 		req_override => OR_AUTHCFG,
 		args_how     => TAKE1,
-		errmsg       => 'Indicate the type of SCM protocol (dav-svn or git-smart-http). This is used to properly detected write requests. Defaults to dev-svn.',
+		errmsg       => 'Indicate the type of Repository (Subversion or Git). This is used to properly detected write requests. Defaults to Subversion.',
 	},
 );
 
@@ -255,7 +255,7 @@ sub DIR_CREATE {
 				AND members.id = member_roles.member_id
 				AND member_roles.role_id = roles.id
 		"),
-		SCMProtocol      => 'dav-svn',
+		RepositoryType   => 'Subversion',
 		IdentifierRegex  => $identifier_re ? qr{$identifier_re} : undef,
 		CacheCredsMax    => 0,
 		CacheCredsCount  => 0,
@@ -286,13 +286,13 @@ sub RedmineDbWhereClause {
 	}
 }
 
-sub RedmineSCMProtocol {
+sub RedmineRepositoryType {
 	my ($cfg, $parms, $arg) = @_;
 	$arg = trim($arg);
-	if($arg eq 'dav-svn' || $arg eq 'git-smart-http') {
-		$cfg->{SCMProtocol} = $arg;
+	if($arg eq 'Subversion' || $arg eq 'Git') {
+		$cfg->{RepositoryType} = $arg;
 	} else {
-		die "Invalid RedmineSCMProtocol value: $arg, choose either dav-svn or git-smart-http !";
+		die "Invalid RedmineRepositoryType value: $arg, choose either Subversion or Git !";
 	}
 }
 
@@ -450,8 +450,10 @@ sub authz_handler {
 
 	my $cfg = get_config($r);
 
-	my ($project_id, $is_public, $status) = $dbh->selectrow_array("SELECT id, is_public, status FROM projects WHERE identifier = ?", undef, $identifier)
-		or return DECLINED;
+	my ($project_id, $is_public, $status) = $dbh->selectrow_array(
+			"SELECT p.id, p.is_public, p.status FROM projects p JOIN repositories r ON (p.id = r.project_id) WHERE p.identifier = ? AND r.type = ?",
+			undef, $identifier, $cfg->{RepositoryType}
+	) or return NOT_FOUND;
 	$is_public = is_true($is_public);
 
 	my($res, $reason) = FORBIDDEN;
@@ -541,7 +543,7 @@ sub is_read_request {
 	my $r = shift;
 
 	my $cfg = get_config($r);
-	if($cfg->{SCMProtocol} eq "dav-svn") {
+	if($cfg->{RepositoryType} eq "Subversion") {
 		return defined $read_only_methods{$r->method};
 	} else {
 		my $quoted_location = quotemeta($r->location);
