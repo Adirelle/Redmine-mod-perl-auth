@@ -453,7 +453,7 @@ sub authz_handler {
 		($project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.id, p.is_public, p.status
 			FROM projects p JOIN repositories r ON (p.id = r.project_id)
-			WHERE p.identifier = ? AND r.type = ?",
+			WHERE p.identifier = ? AND r.is_default AND r.type = ?",
 			undef, $identifier, $cfg->{RepositoryType}
 		);
 
@@ -461,8 +461,8 @@ sub authz_handler {
 		($identifier, $project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.identifier, p.id, p.is_public, p.status
 			FROM projects p JOIN repositories r ON (p.id = r.project_id)
-			WHERE COALESCE(r.identifier, p.identifier) = ? AND r.type = ?",
-			undef, $repo_id, $cfg->{RepositoryType}
+			WHERE ((r.is_default AND p.identifier = ?) OR r.identifier = ?) AND r.type = ?",
+			undef, $repo_id, $repo_id, $cfg->{RepositoryType}
 		);
 	}
 
