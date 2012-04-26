@@ -442,18 +442,32 @@ sub authz_handler {
 			return FORBIDDEN;
 	}
 
-	my $identifier = get_project_identifier($r)
-		or return DECLINED;
-
 	my $dbh = connect_database($r)
 		or return SERVER_ERROR;
 
 	my $cfg = get_config($r);
 
-	my ($project_id, $is_public, $status) = $dbh->selectrow_array(
-			"SELECT p.id, p.is_public, p.status FROM projects p JOIN repositories r ON (p.id = r.project_id) WHERE p.identifier = ? AND r.type = ?",
+	my ($identifier, $project_id, $is_public, $status);
+
+	if($identifier = $cfg->{Project}) {
+		($project_id, $is_public, $status) = $dbh->selectrow_array(
+			"SELECT p.id, p.is_public, p.status
+			FROM projects p JOIN repositories r ON (p.id = r.project_id)
+			WHERE p.identifier = ? AND r.type = ?",
 			undef, $identifier, $cfg->{RepositoryType}
-	) or return NOT_FOUND;
+		);
+
+	} elsif(my $repo_id = get_repository_identifier($r)) {
+		($identifier, $project_id, $is_public, $status) = $dbh->selectrow_array(
+			"SELECT p.identifier, p.id, p.is_public, p.status
+			FROM projects p JOIN repositories r ON (p.id = r.project_id)
+			WHERE COALESCE(r.identifier, p.identifier) = ? AND r.type = ?",
+			undef, $repo_id, $cfg->{RepositoryType}
+		);
+	}
+
+	return NOT_FOUND unless defined $project_id;
+
 	$is_public = is_true($is_public);
 
 	my($res, $reason) = FORBIDDEN;
@@ -525,16 +539,11 @@ sub authz_handler {
 	return $res;
 }
 
-# get the project identifier
-sub get_project_identifier {
+# get the repository identifier from the URI
+sub get_repository_identifier {
 	my ($r) = @_;
-
 	my $cfg = get_config($r);
-	my $identifier = $cfg->{Project};
-	unless(defined $identifier || !defined $cfg->{IdentifierRegex}) {
-		($identifier) = ($r->uri =~ $cfg->{IdentifierRegex});
-	}
-
+	my($identifier) = ($r->uri =~ $cfg->{IdentifierRegex}) if defined $cfg->{IdentifierRegex};
 	return $identifier;
 }
 
@@ -600,9 +609,9 @@ sub is_true {
 # build credential cache key
 sub get_cache_key {
 	my ($r, $password) = @_;
-	my $project = get_project_identifier($r)
+	my $identifier = get_config($r)->{Project} || get_repository_identifier($r)
 		or return;
-	return Digest::SHA::sha1_hex(join(':', $project, $r->user, $password, is_read_request($r) ? 'read' : 'write'));
+	return Digest::SHA::sha1_hex(join(':', $identifier, $r->user, $password, is_read_request($r) ? 'read' : 'write'));
 }
 
 # check if credentials exist in cache
