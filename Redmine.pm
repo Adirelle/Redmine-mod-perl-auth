@@ -290,7 +290,7 @@ sub RedmineRepositoryType {
 	my ($cfg, $parms, $arg) = @_;
 	$arg = trim($arg);
 	if($arg eq 'Subversion' || $arg eq 'Git') {
-		$cfg->{RepositoryType} = $arg;
+		$cfg->{RepositoryType} = 'Repository::'.$arg;
 	} else {
 		die "Invalid RedmineRepositoryType value: $arg, choose either Subversion or Git !";
 	}
