@@ -456,6 +456,10 @@ sub authz_handler {
 			WHERE p.identifier = ? AND r.is_default AND r.type = ?",
 			undef, $identifier, $cfg->{RepositoryType}
 		);
+		unless(defined $project_id) {
+			$r->log_reason("No matching project for ${identifier}");
+			return NOT_FOUND;
+		}
 
 	} elsif(my $repo_id = get_repository_identifier($r)) {
 		($identifier, $project_id, $is_public, $status) = $dbh->selectrow_array(
@@ -464,9 +468,15 @@ sub authz_handler {
 			WHERE ((r.is_default AND p.identifier = ?) OR r.identifier = ?) AND r.type = ?",
 			undef, $repo_id, $repo_id, $cfg->{RepositoryType}
 		);
-	}
+		unless(defined $project_id) {
+			$r->log_reason("No matching project for ${repo_id}");
+			return NOT_FOUND;
+		}
 
-	return NOT_FOUND unless defined $project_id;
+	} else {
+		# Cannot get a project out of the URL, we probably are on the parent path (e.g. /svn/)
+		return FORBIDDEN;
+	}
 
 	$is_public = is_true($is_public);
 
