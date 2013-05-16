@@ -145,7 +145,7 @@ use Digest::SHA;
 my $CanUseLDAPAuth = eval("use Authen::Simple::LDAP; 1");
 
 # Reload ourself (disable in production)
-use Apache2::Reload;
+# use Apache2::Reload;
 
 use Apache2::Module;
 use Apache2::Access;
