@@ -565,8 +565,7 @@ sub is_read_request {
 	if($cfg->{RepositoryType} eq "Subversion") {
 		return defined $read_only_methods{$r->method};
 	} else {
-		my $quoted_location = quotemeta($r->location);
-		return $r->uri !~ m@^$quoted_location/.*/git-receive-pack$@;
+		return $r->unparsed_uri !~ m@[=/]git-receive-pack@;
 	}
 }
 
