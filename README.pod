@@ -97,6 +97,14 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		## Default: Off
 		# RedmineDenyNonMember On
 
+                ## Allow authentication by API key
+                ## Default: Off
+                # RedmineKeyAuthentication On
+
+                ## Username for authentication by API key
+                ## Default: api-key
+                # RedmineKeyUsername key"
+
 		## Administrators have super-powers
 		## Default: On
 		# RedmineSuperAdmin Off
