@@ -35,7 +35,7 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 =head1 CONFIGURATION
 
 	## This module has to be in your perl path
-	## eg:  /usr/lib/perl5/Apache/Authn/Redmine.pm
+	## eg:	/usr/lib/perl5/Apache/Authn/Redmine.pm
 	PerlLoadModule Apache::Authn::Redmine
 	<Location /svn>
 		DAV svn
@@ -96,6 +96,14 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		## Deny non-member access to projects.
 		## Default: Off
 		# RedmineDenyNonMember On
+
+		## Allow authentication by API key
+		## Default: Off
+		# RedmineKeyAuthentication On
+
+		## Username for authentication by API key
+		## Default: api-key
+		# RedmineKeyUsername key"
 
 		## Administrators have super-powers
 		## Default: On

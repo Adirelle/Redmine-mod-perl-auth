@@ -99,6 +99,14 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		## Default: Off
 		# RedmineDenyNonMember On
 
+		## Allow authentication by API key
+		## Default: Off
+		# RedmineKeyAuthentication On
+
+		## Username for authentication by API key
+		## Default: api-key
+		# RedmineKeyUsername key
+
 		## Administrators have super-powers
 		## Default: On
 		# RedmineSuperAdmin Off
@@ -240,6 +248,18 @@ my @directives = (
 		errmsg       => 'Indicate the type of Repository (Subversion or Git or None). This is used to properly detected write requests. Defaults to Subversion.',
 	},
 	{
+		name         => 'RedmineKeyAuthentication',
+		req_override => OR_AUTHCFG,
+		args_how     => FLAG,
+		errmsg       => 'Allow authentication by API key. Defaults to no.'
+	},
+	{
+		name         => 'RedmineKeyUsername',
+		req_override => OR_AUTHCFG,
+		args_how     => TAKE1,
+		errmsg       => 'USername to use for authenticiation with API KEY. Defaults to api-key.'
+	},
+	{
 		name         => 'RedmineSetUserAttributes',
 		req_override => OR_AUTHCFG,
 		args_how     => FLAG,
@@ -269,6 +289,8 @@ sub DIR_CREATE {
 		DenyAnonymous    => 0,
 		DenyNonMember    => 0,
 		SuperAdmin       => 1,
+		KeyAuthentication => 0,
+		KeyUsername       => 'api-key',
 		SetUserAttributes => 0,
 		AttributesCacheCredsCount  => 0,
 	}, $class;
@@ -286,6 +308,8 @@ sub RedmineCacheCredsMaxAge { set_val('CacheCredsMaxAge', @_); }
 sub RedmineDenyAnonymous { set_val('DenyAnonymous', @_); }
 sub RedmineDenyNonMember { set_val('DenyNonMember', @_); }
 sub RedmineSuperAdmin { set_val('SuperAdmin', @_); }
+sub RedmineKeyAuthentication  { set_val('KeyAuthentication', @_); }
+sub RedmineKeyUsername { set_val('KeyUsername', @_); }
 sub RedmineSetUserAttributes { set_val('SetUserAttributes', @_); }
 
 sub RedmineDbWhereClause {
@@ -334,8 +358,8 @@ sub authen_handler {
 	my $r = shift;
 
 	unless ($r->some_auth_required) {
-			$r->log_reason("No authentication has been configured");
-			return FORBIDDEN;
+		$r->log_reason("No authentication has been configured");
+		return FORBIDDEN;
 	}
 
 	my ($res, $password) = $r->get_basic_auth_pw();
@@ -344,7 +368,7 @@ sub authen_handler {
 	if($res == OK) {
 		# Got user and password
 
-		#	Used cached credentials if possible
+		# Used cached credentials if possible
 		my $cache_key = get_cache_key($r, $password);
 		my $cfg = get_config($r);
 		if(defined $cache_key && !$cfg->{SetUserAttributes} && cache_get($r, $cache_key)) {
@@ -360,7 +384,7 @@ sub authen_handler {
 			my $dbh = connect_database($r)
 				or return SERVER_ERROR;
 
-			($res, $reason) = check_login($r, $dbh, $password, $cfg);
+			($res, $reason) = check_login($r, $dbh, $password);
 			$dbh->disconnect();
 
 			# Store the cache key for latter use
@@ -390,53 +414,40 @@ sub authen_handler {
 	return $res;
 }
 
-
 sub check_login {
-	my ($r, $dbh, $password, $cfg) = @_;
+	my ($r, $dbh, $password) = @_;
 	my $user = $r->user;
+	my $status;
 
-	my ($hashed_password, $status, $auth_source_id, $salt, $id, $firstname, $lastname, $email_address) =
-		$dbh->selectrow_array('SELECT users.hashed_password, users.status, users.auth_source_id, users.salt, users.id, users.firstname, users.lastname, email_addresses.address
-		FROM users
-		LEFT JOIN email_addresses on (email_addresses.user_id=users.id and email_addresses.is_default=1)
-		WHERE users.login = ?', undef, $user)
-		or return (AUTH_REQUIRED, "unknown user '$user'");
+	my $cfg = get_config($r);
 
-	# Check password
-	if($auth_source_id) {
-		# LDAP authentication
+	my ($hashed_password, $auth_source_id, $salt, $id, $firstname, $lastname, $email_address);
 
-		# Ensure Authen::Simple::LDAP is available
-		return (SERVER_ERROR, "Redmine LDAP authentication requires Authen::Simple::LDAP")
-			unless $CanUseLDAPAuth;
-
-		# Get LDAP server informations
-		my($host, $port, $tls, $account, $account_password, $base_dn, $attr_login) = $dbh->selectrow_array(
-			"SELECT host,port,tls,account,account_password,base_dn,attr_login from auth_sources WHERE id = ?",
-			undef,
-			$auth_source_id
-		)
-			or return (SERVER_ERROR, "Undefined authentication source for '$user'");
-
-		# Connect to the LDAP server
-		my $ldap = Authen::Simple::LDAP->new(
-				host    =>      is_true($tls) ? "ldaps://$host:$port" : $host,
-				port    =>      $port,
-				basedn  =>      $base_dn,
-				binddn  =>      $account || "",
-				bindpw  =>      $account_password || "",
-				filter  =>      '('.$attr_login.'=%s)'
-		);
-
-		# Finally check user login
-		return (AUTH_REQUIRED, "LDAP authentication failed (user: '$user', server: '$host')")
-			unless $ldap->authenticate($user, $password);
+	if ($cfg->{KeyAuthentication} && $user eq $cfg->{KeyUsername}) {
+		# API key auth
+		($user, $status) = $dbh->selectrow_array('SELECT u.login, u.status FROM users u INNER JOIN tokens t ON (t.user_id = u.id)  WHERE t.action = \'api\' AND t.value = ?', undef, $password)
+			or return (AUTH_REQUIRED, "unknown api-key '$password'");
+		$r->user($user);
 
 	} else {
-		# Database authentication
-		my $pass_digest = Digest::SHA::sha1_hex($password);
-		return (AUTH_REQUIRED, "wrong password for '$user'")
-			unless $hashed_password eq Digest::SHA::sha1_hex($salt.$pass_digest);
+		# Login+password auth
+		($hashed_password, $status, $auth_source_id, $salt, $id, $firstname, $lastname, $email_address) =
+			$dbh->selectrow_array('SELECT users.hashed_password, users.status, users.auth_source_id, users.salt, users.id, users.firstname, users.lastname, email_addresses.address
+				FROM users
+				LEFT JOIN email_addresses on (email_addresses.user_id=users.id and email_addresses.is_default = true)
+				WHERE users.login = ?', undef, $user)
+			or return (AUTH_REQUIRED, "unknown user '$user'");
+
+		my ($res, $reason);
+
+		if ($auth_source_id) {
+			($res, $reason) = check_ldap_login($dbh, $auth_source_id, $user, $password);
+		} else {
+			($res, $reason) = check_db_login($user, $password, $hashed_password, $salt);
+		}
+
+		# Bail out if authentication failed
+		return ($res, $reason) unless $res == OK;
 	}
 
 	# Password is ok, check if account if locked
@@ -450,12 +461,59 @@ sub check_login {
 		}
 		$r->subprocess_env->set("REDMINE_FIRSTNAME" => $firstname);
 		$r->subprocess_env->set("REDMINE_LASTNAME" => $lastname);
+
 		$r->log->debug("successfully authenticated as active redmine user '$user'");
 	}
 
 	# Everything's ok
 	return OK;
 }
+
+sub check_ldap_login {
+	# Ensure Authen::Simple::LDAP is available
+	return (SERVER_ERROR, "Redmine LDAP authentication requires Authen::Simple::LDAP")
+		unless $CanUseLDAPAuth;
+
+	my ($dbh, $auth_source_id, $user, $password) = @_;
+
+	# Get LDAP server informations
+	my($host, $port, $tls, $account, $account_password, $base_dn, $attr_login) = $dbh->selectrow_array(
+		"SELECT host,port,tls,account,account_password,base_dn,attr_login from auth_sources WHERE id = ?",
+		undef,
+		$auth_source_id
+	)
+		or return (SERVER_ERROR, "Undefined authentication source for '$user'");
+
+	# Connect to the LDAP server
+	my $ldap = Authen::Simple::LDAP->new(
+		host	=>	is_true($tls) ? "ldaps://$host:$port" : $host,
+		port	=>	$port,
+		basedn	=>	$base_dn,
+		binddn	=>	$account || "",
+		bindpw	=>	$account_password || "",
+		filter	=>	'('.$attr_login.'=%s)'
+	);
+
+	# Finally check user login
+	return (AUTH_REQUIRED, "LDAP authentication failed (user: '$user', server: '$host')")
+		unless $ldap->authenticate($user, $password);
+
+	# LDAP auth is ok
+	return OK;
+}
+
+sub check_db_login {
+	my ($user, $password, $hashed_password, $salt) = @_ ;
+
+	# Database authentication
+	my $pass_digest = Digest::SHA::sha1_hex($password);
+	return (AUTH_REQUIRED, "wrong password for '$user'")
+		unless $hashed_password eq Digest::SHA::sha1_hex($salt.$pass_digest);
+
+	# Database password is ok
+	return OK;
+}
+
 
 # check if authentication is forced
 sub is_authentication_forced {
@@ -507,11 +565,12 @@ sub authz_handler {
 		}
 
 	} elsif(my $repo_id = get_repository_identifier($r)) {
+		my @pr_id = split(/\./, $repo_id);
 		($identifier, $project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.identifier, p.id, p.is_public, p.status
 			FROM projects p JOIN repositories r ON (p.id = r.project_id)
 			WHERE ((r.is_default AND p.identifier = ?) OR r.identifier = ?) AND r.type = ?",
-			undef, $repo_id, $repo_id, $cfg->{RepositoryType}
+			undef, $pr_id[0], $repo_id, $cfg->{RepositoryType}
 		);
 		unless(defined $project_id) {
 			$r->log_reason("No matching project for ${repo_id}");
