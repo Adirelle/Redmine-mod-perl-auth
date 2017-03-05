@@ -61,9 +61,9 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		# RedmineDbWhereClause "and members.role_id IN (1,2)"
 
 		## SCM transport protocol, used to detecte write requests
-		## Valid values: dav-svn, git-smart-http
-		## Default: dav-svn
-		# RedmineSCMProtocol dav-svn
+		## Valid values: Subversion, Git, None
+		## Default: Subversion
+		# RedmineRepositoryType Subversion
 
 		## Credentials cache size
 		## Default: 0 (disabled)
@@ -132,4 +132,6 @@ S<them :>
 
 And you need to upgrade at least reposman.rb (after r860).
 
+
 =cut
+

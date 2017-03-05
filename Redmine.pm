@@ -63,7 +63,7 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		# RedmineDbWhereClause "and members.role_id IN (1,2)"
 
 		## SCM transport protocol, used to detecte write requests
-		## Valid values: Subversion, Git
+		## Valid values: Subversion, Git, None
 		## Default: Subversion
 		# RedmineRepositoryType Subversion
 
@@ -237,7 +237,7 @@ my @directives = (
 		name         => 'RedmineRepositoryType',
 		req_override => OR_AUTHCFG,
 		args_how     => TAKE1,
-		errmsg       => 'Indicate the type of Repository (Subversion or Git). This is used to properly detected write requests. Defaults to Subversion.',
+		errmsg       => 'Indicate the type of Repository (Subversion or Git or None). This is used to properly detected write requests. Defaults to Subversion.',
 	},
 );
 
@@ -291,8 +291,10 @@ sub RedmineRepositoryType {
 	$arg = trim($arg);
 	if($arg eq 'Subversion' || $arg eq 'Git') {
 		$cfg->{RepositoryType} = 'Repository::'.$arg;
+	} elsif($arg eq 'None') {
+		$cfg->{RepositoryType} = $arg;
 	} else {
-		die "Invalid RedmineRepositoryType value: $arg, choose either Subversion or Git !";
+		die "Invalid RedmineRepositoryType value: $arg, choose either Subversion or Git or None !";
 	}
 }
 
@@ -449,7 +451,7 @@ sub authz_handler {
 
 	my ($identifier, $project_id, $is_public, $status);
 
-	if($identifier = $cfg->{Project}) {
+	if($identifier = $cfg->{Project} and $cfg->{RepositoryType} ne 'None') {
 		($project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.id, p.is_public, p.status
 			FROM projects p JOIN repositories r ON (p.id = r.project_id)
@@ -461,7 +463,19 @@ sub authz_handler {
 			return NOT_FOUND;
 		}
 
-	} elsif(my $repo_id = get_repository_identifier($r)) {
+	} elsif($identifier = $cfg->{Project} and $cfg->{RepositoryType} eq 'None') {
+		($project_id, $is_public, $status) = $dbh->selectrow_array(
+			"SELECT p.id, p.is_public, p.status
+			FROM projects p
+			WHERE p.identifier = ?",
+			undef, $identifier
+		);
+		unless(defined $project_id) {
+			$r->log_reason("No matching project for ${identifier}");
+			return NOT_FOUND;
+		}
+
+	} elsif($cfg->{RepositoryType} ne 'None' and my $repo_id = get_repository_identifier($r)) {
 		($identifier, $project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.identifier, p.id, p.is_public, p.status
 			FROM projects p JOIN repositories r ON (p.id = r.project_id)
