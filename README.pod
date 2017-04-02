@@ -101,6 +101,10 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		## Default: On
 		# RedmineSuperAdmin Off
 
+		## Sets firstname, lastname, email address to environment variables
+		## Default: Off
+		# RedmineSetUserAttributes Off
+
 	</Location>
 
 To be able to browse repository inside redmine, you must add something
