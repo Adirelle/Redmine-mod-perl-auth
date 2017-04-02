@@ -101,7 +101,7 @@ Authen::Simple::LDAP (and IO::Socket::SSL if LDAPS is used):
 		## Default: On
 		# RedmineSuperAdmin Off
 
-		## Sets firstname, lastname, email address to environment variables
+		## Sets firstname, lastname, email address to environment variables.
 		## Default: Off
 		# RedmineSetUserAttributes Off
 
