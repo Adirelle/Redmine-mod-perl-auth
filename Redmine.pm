@@ -350,7 +350,6 @@ sub authen_handler {
 		if(defined $cache_key && !$cfg->{SetUserAttributes} && cache_get($r, $cache_key)) {
 			$r->log->debug("reusing cached credentials for user '", $r->user, "'");
 			$r->set_handlers(PerlAuthzHandler => undef);
-			attributes_cache_get($r, $cache_key);
 
 		} elsif(defined $cache_key && $cfg->{SetUserAttributes} && cache_get($r, $cache_key) && attributes_cache_get($r, $cache_key)) {
 			$r->log->debug("reusing cached credentials for user '", $r->user, "' including attributes");
@@ -361,7 +360,7 @@ sub authen_handler {
 			my $dbh = connect_database($r)
 				or return SERVER_ERROR;
 
-			($res, $reason) = check_login($r, $dbh, $password);
+			($res, $reason) = check_login($r, $dbh, $password, $cfg);
 			$dbh->disconnect();
 
 			# Store the cache key for latter use
@@ -393,10 +392,14 @@ sub authen_handler {
 
 
 sub check_login {
-	my ($r, $dbh, $password) = @_;
+	my ($r, $dbh, $password, $cfg) = @_;
 	my $user = $r->user;
 
-	my ($hashed_password, $status, $auth_source_id, $salt, $id, $firstname, $lastname) = $dbh->selectrow_array('SELECT hashed_password, status, auth_source_id, salt, id, firstname, lastname FROM users WHERE login = ?', undef, $user)
+	my ($hashed_password, $status, $auth_source_id, $salt, $id, $firstname, $lastname, $email_address) =
+		$dbh->selectrow_array('SELECT users.hashed_password, users.status, users.auth_source_id, users.salt, users.id, users.firstname, users.lastname, email_addresses.address
+		FROM users
+		LEFT JOIN email_addresses on (email_addresses.user_id=users.id and email_addresses.is_default=1)
+		WHERE users.login = ?', undef, $user)
 		or return (AUTH_REQUIRED, "unknown user '$user'");
 
 	# Check password
@@ -439,21 +442,16 @@ sub check_login {
 	# Password is ok, check if account if locked
 	return (FORBIDDEN, "inactive account: '$user'") unless $status == 1;
 
-	my($email_address) = $dbh->selectrow_array(
-		"SELECT address
-		FROM email_addresses
-		WHERE email_addresses.user_id=? and is_default=1",
-		undef, 
-		$id
-	);
-	if (defined $email_address) {
-		$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => $email_address);
-	} else {
-		$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => "");
+	if ($cfg->{SetUserAttributes}) {
+		if (defined $email_address) {
+			$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => $email_address);
+		} else {
+			$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => "");
+		}
+		$r->subprocess_env->set("REDMINE_FIRSTNAME" => $firstname);
+		$r->subprocess_env->set("REDMINE_LASTNAME" => $lastname);
+		$r->log->debug("successfully authenticated as active redmine user '$user'");
 	}
-	$r->subprocess_env->set("REDMINE_FIRSTNAME" => $firstname);
-	$r->subprocess_env->set("REDMINE_LASTNAME" => $lastname);
-	$r->log->debug("successfully authenticated as active redmine user '$user'");
 
 	# Everything's ok
 	return OK;
@@ -480,19 +478,11 @@ sub authz_handler {
 
 	my ($identifier, $project_id, $is_public, $status);
 
-	if($identifier = $cfg->{Project} and $cfg->{RepositoryType} ne 'None') {
-		($project_id, $is_public, $status) = $dbh->selectrow_array(
-			"SELECT p.id, p.is_public, p.status
-			FROM projects p JOIN repositories r ON (p.id = r.project_id)
-			WHERE p.identifier = ? AND r.is_default AND r.type = ?",
-			undef, $identifier, $cfg->{RepositoryType}
-		);
-		unless(defined $project_id) {
-			$r->log_reason("No matching project for ${identifier}");
-			return NOT_FOUND;
+	if($cfg->{RepositoryType} eq 'None') {
+		$identifier = $cfg->{Project};
+		if(!$cfg->{Project}) {
+			return FORBIDDEN;
 		}
-
-	} elsif($identifier = $cfg->{Project} and $cfg->{RepositoryType} eq 'None') {
 		($project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.id, p.is_public, p.status
 			FROM projects p
@@ -504,7 +494,19 @@ sub authz_handler {
 			return NOT_FOUND;
 		}
 
-	} elsif($cfg->{RepositoryType} ne 'None' and my $repo_id = get_repository_identifier($r)) {
+	} elsif($identifier = $cfg->{Project}) {
+		($project_id, $is_public, $status) = $dbh->selectrow_array(
+			"SELECT p.id, p.is_public, p.status
+			FROM projects p JOIN repositories r ON (p.id = r.project_id)
+			WHERE p.identifier = ? AND r.is_default AND r.type = ?",
+			undef, $identifier, $cfg->{RepositoryType}
+		);
+		unless(defined $project_id) {
+			$r->log_reason("No matching project for ${identifier}");
+			return NOT_FOUND;
+		}
+
+	} elsif(my $repo_id = get_repository_identifier($r)) {
 		($identifier, $project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.identifier, p.id, p.is_public, p.status
 			FROM projects p JOIN repositories r ON (p.id = r.project_id)
@@ -697,7 +699,6 @@ sub attributes_cache_get {
 	my $cache_text = $cfg->{AttributesCacheCreds}->get($key)
 		or return 0;
 
-	$r->log->error("cache_text:$cache_text");
 	my($time, $email_address, $firstname, $lastname) = split(":", $cache_text);
 	if($cfg->{CacheCredsMaxAge} && ($r->request_time - $time) > $cfg->{CacheCredsMaxAge}) {
 		$cfg->{AttributesCacheCreds}->unset($key);
