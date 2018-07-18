@@ -470,7 +470,7 @@ sub check_ldap_login {
 }
 
 sub check_db_login {
-	my ($user, $password, $hashed_password, $salt) = @_
+	my ($user, $password, $hashed_password, $salt) = @_ ;
 
 	# Database authentication
 	my $pass_digest = Digest::SHA::sha1_hex($password);
@@ -516,11 +516,12 @@ sub authz_handler {
 		}
 
 	} elsif(my $repo_id = get_repository_identifier($r)) {
+		my @pr_id = split(/\./, $repo_id);
 		($identifier, $project_id, $is_public, $status) = $dbh->selectrow_array(
 			"SELECT p.identifier, p.id, p.is_public, p.status
 			FROM projects p JOIN repositories r ON (p.id = r.project_id)
 			WHERE ((r.is_default AND p.identifier = ?) OR r.identifier = ?) AND r.type = ?",
-			undef, $repo_id, $repo_id, $cfg->{RepositoryType}
+			undef, $pr_id[0], $repo_id, $cfg->{RepositoryType}
 		);
 		unless(defined $project_id) {
 			$r->log_reason("No matching project for ${repo_id}");
