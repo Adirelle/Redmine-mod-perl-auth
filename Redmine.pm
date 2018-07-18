@@ -259,6 +259,12 @@ my @directives = (
 		args_how     => TAKE1,
 		errmsg       => 'USername to use for authenticiation with API KEY. Defaults to api-key.'
 	},
+	{
+		name         => 'RedmineSetUserAttributes',
+		req_override => OR_AUTHCFG,
+		args_how     => FLAG,
+		errmsg       => 'Sets firstname, lastname, email address to environment variables. Defaults to no.',
+	},
 );
 
 # Initialize defaults configuration
@@ -285,6 +291,8 @@ sub DIR_CREATE {
 		SuperAdmin       => 1,
 		KeyAuthentication => 0,
 		KeyUsername       => 'api-key',
+		SetUserAttributes => 0,
+		AttributesCacheCredsCount  => 0,
 	}, $class;
 }
 
@@ -302,6 +310,7 @@ sub RedmineDenyNonMember { set_val('DenyNonMember', @_); }
 sub RedmineSuperAdmin { set_val('SuperAdmin', @_); }
 sub RedmineKeyAuthentication  { set_val('KeyAuthentication', @_); }
 sub RedmineKeyUsername { set_val('KeyUsername', @_); }
+sub RedmineSetUserAttributes { set_val('SetUserAttributes', @_); }
 
 sub RedmineDbWhereClause {
 	my ($cfg, $parms, $arg) = @_;
@@ -359,8 +368,14 @@ sub authen_handler {
 
 		#	Used cached credentials if possible
 		my $cache_key = get_cache_key($r, $password);
-		if(defined $cache_key && cache_get($r, $cache_key)) {
+		my $cfg = get_config($r);
+		if(defined $cache_key && !$cfg->{SetUserAttributes} && cache_get($r, $cache_key)) {
 			$r->log->debug("reusing cached credentials for user '", $r->user, "'");
+			$r->set_handlers(PerlAuthzHandler => undef);
+			attributes_cache_get($r, $cache_key);
+
+		} elsif(defined $cache_key && $cfg->{SetUserAttributes} && cache_get($r, $cache_key) && attributes_cache_get($r, $cache_key)) {
+			$r->log->debug("reusing cached credentials for user '", $r->user, "' including attributes");
 			$r->set_handlers(PerlAuthzHandler => undef);
 
 		} else {
@@ -413,8 +428,8 @@ sub check_login {
 
 	} else {
 		# Login+password auth
-		my ($hashed_password, $auth_source_id, $salt, $res, $reason);
-		($hashed_password, $status, $auth_source_id, $salt) = $dbh->selectrow_array('SELECT hashed_password, status, auth_source_id, salt FROM users WHERE login = ?', undef, $user)
+		my ($hashed_password, $auth_source_id, $salt, $id, $firstname, $lastname, $res, $reason);
+		($hashed_password, $status, $auth_source_id, $salt, $id, $firstname, $lastname) = $dbh->selectrow_array('SELECT hashed_password, status, auth_source_id, salt, id, firstname, lastname FROM users WHERE login = ?', undef, $user)
 			or return (AUTH_REQUIRED, "unknown user '$user'");
 
 		if ($auth_source_id) {
@@ -429,6 +444,21 @@ sub check_login {
 
 	# Password is ok, check if account if locked
 	return (FORBIDDEN, "inactive account: '$user'") unless $status == 1;
+
+	my($email_address) = $dbh->selectrow_array(
+		"SELECT address
+		FROM email_addresses
+		WHERE email_addresses.user_id=? and is_default=1",
+		undef, 
+		$id
+	);
+	if (defined $email_address) {
+		$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => $email_address);
+	} else {
+		$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => "");
+	}
+	$r->subprocess_env->set("REDMINE_FIRSTNAME" => $firstname);
+	$r->subprocess_env->set("REDMINE_LASTNAME" => $lastname);
 
 	$r->log->debug("successfully authenticated as active redmine user '$user'");
 
@@ -585,6 +615,7 @@ sub authz_handler {
 			# Put successful credentials in cache
 			if(my $cache_key = $r->pnotes("RedmineCacheKey")) {
 				cache_set($r, $cache_key);
+				attributes_cache_set($r, $cache_key);
 			}
 
 		} else {
@@ -658,7 +689,10 @@ sub connect_database {
 	my $r = shift;
 
 	my $cfg = get_config($r);
-	my $dbh = DBI->connect($cfg->{DSN}, $cfg->{DbUser}, $cfg->{DbPass})
+	my $dbh = DBI->connect($cfg->{DSN}, $cfg->{DbUser}, $cfg->{DbPass}, {
+		pg_enable_utf8 => 1,
+		mysql_enable_utf8 => 1,
+	})
 		or $r->log->error("Connection to database failed: $DBI::errstr.");
 
 	return $dbh;
@@ -696,6 +730,30 @@ sub cache_get {
 	return 1;
 }
 
+sub attributes_cache_get {
+	my($r, $key) = @_;
+
+	my $cfg = get_config($r);
+	return unless $cfg->{CacheCredsMax} && $cfg->{AttributesCacheCreds};
+
+	my $cache_text = $cfg->{AttributesCacheCreds}->get($key)
+	or return 0;
+
+	$r->log->error("cache_text:$cache_text");
+	my($time, $email_address, $firstname, $lastname) = split(":", $cache_text);
+	if($cfg->{CacheCredsMaxAge} && ($r->request_time - $time) > $cfg->{CacheCredsMaxAge}) {
+		$cfg->{AttributesCacheCreds}->unset($key);
+		$cfg->{AttributesCacheCredsCount}--;
+		return 0;
+	}
+
+	$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS", $email_address . "");
+	$r->subprocess_env->set("REDMINE_FIRSTNAME", $firstname . "");
+	$r->subprocess_env->set("REDMINE_LASTNAME", $lastname . "");
+
+	return 1;
+}
+
 # put credentials in cache
 sub cache_set {
 	my($r, $key) = @_;
@@ -714,6 +772,30 @@ sub cache_set {
 	}
 	$cfg->{CacheCreds}->set($key, $r->request_time);
 	$cfg->{CacheCredsCount}++;
+}
+
+sub attributes_cache_set {
+	my($r, $key) = @_;
+
+	my $cfg = get_config($r);
+	return unless $cfg->{CacheCredsMax};
+
+	unless($cfg->{AttributesCacheCreds}) {
+		$cfg->{AttributesCachePool} = APR::Pool->new;
+	$cfg->{AttributesCacheCreds} = APR::Table::make($cfg->{AttributesCachePool}, $cfg->{CacheCredsMax});
+	}
+
+	if($cfg->{AttributesCacheCredsCount} >= $cfg->{CacheCredsMax}) {
+		$cfg->{AttributesCacheCreds}->clear;
+		$cfg->{AttributesCacheCredsCount} = 0;
+	}
+	my $cache_text = join(":", $r->request_time,
+		$r->subprocess_env->get("REDMINE_DEFAULT_EMAIL_ADDRESS"),
+		$r->subprocess_env->get("REDMINE_FIRSTNAME"),
+		$r->subprocess_env->get("REDMINE_LASTNAME"),
+	);
+	$cfg->{AttributesCacheCreds}->set($key, $cache_text);
+	$cfg->{AttributesCacheCredsCount}++;
 }
 
 1;
