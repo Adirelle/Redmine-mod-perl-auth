@@ -420,6 +420,8 @@ sub check_login {
 
 	my $cfg = get_config($r);
 
+	my ($hashed_password, $auth_source_id, $salt, $id, $firstname, $lastname, $email_address);
+
 	if ($cfg->{KeyAuthentication} && $user eq $cfg->{KeyUsername}) {
 		# API key auth
 		($user, $status) = $dbh->selectrow_array('SELECT u.login, u.status FROM users u INNER JOIN tokens t ON (t.user_id = u.id)  WHERE t.action = \'api\' AND t.value = ?', undef, $password)
@@ -428,10 +430,15 @@ sub check_login {
 
 	} else {
 		# Login+password auth
-		my ($hashed_password, $auth_source_id, $salt, $id, $firstname, $lastname, $res, $reason);
-		($hashed_password, $status, $auth_source_id, $salt, $id, $firstname, $lastname) = $dbh->selectrow_array('SELECT hashed_password, status, auth_source_id, salt, id, firstname, lastname FROM users WHERE login = ?', undef, $user)
+		($hashed_password, $status, $auth_source_id, $salt, $id, $firstname, $lastname, $email_address) =
+		$dbh->selectrow_array('SELECT users.hashed_password, users.status, users.auth_source_id, users.salt, users.id, users.firstname, users.lastname, email_addresses.address
+		FROM users
+		LEFT JOIN email_addresses on (email_addresses.user_id=users.id and email_addresses.is_default = true)
+		WHERE users.login = ?', undef, $user)
 			or return (AUTH_REQUIRED, "unknown user '$user'");
-
+			
+		my ($res, $reason);
+		
 		if ($auth_source_id) {
 			($res, $reason) = check_ldap_login($dbh, $auth_source_id, $user, $password);
 		} else {
@@ -445,22 +452,17 @@ sub check_login {
 	# Password is ok, check if account if locked
 	return (FORBIDDEN, "inactive account: '$user'") unless $status == 1;
 
-	my($email_address) = $dbh->selectrow_array(
-		"SELECT address
-		FROM email_addresses
-		WHERE email_addresses.user_id=? and is_default=1",
-		undef, 
-		$id
-	);
-	if (defined $email_address) {
-		$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => $email_address);
-	} else {
-		$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => "");
+	if ($cfg->{SetUserAttributes}) {
+		if (defined $email_address) {
+			$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => $email_address);
+		} else {
+			$r->subprocess_env->set("REDMINE_DEFAULT_EMAIL_ADDRESS" => "");
+		}
+		$r->subprocess_env->set("REDMINE_FIRSTNAME" => $firstname);
+		$r->subprocess_env->set("REDMINE_LASTNAME" => $lastname);
+	
+		$r->log->debug("successfully authenticated as active redmine user '$user'");
 	}
-	$r->subprocess_env->set("REDMINE_FIRSTNAME" => $firstname);
-	$r->subprocess_env->set("REDMINE_LASTNAME" => $lastname);
-
-	$r->log->debug("successfully authenticated as active redmine user '$user'");
 
 	# Everything's ok
 	return OK;
